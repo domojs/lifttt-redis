@@ -25,19 +25,19 @@ module.exports={
         },
         {
             name:"equals",
-            fields:[{name:"command", displayName:"The command to run"},{name:"args", displayName:"arguments"}, {name:"value", displayName:"Value to compare"}, {name:"host", displayName:"The redis host"}, {name:"port", displayName:"The redis port"}],
-            delegate:function(fields, callback){
+            fields:[{name:"command", displayName:"The command to run"}, {name:"args", displayName:"arguments"}, {name:"poll", displayName:"Polling interval"}, {name:"value", displayName:"Value to compare"}, {name:"host", displayName:"The redis host"}, {name:"port", displayName:"The redis port"}],
+            when:function(fields, callback){
                 var client=$('../modules/db/node_modules/redis').createClient(fields.port || 6379, fields.host || 'localhost');
-                var result=function(){
+                var checker=function(){
                     client[fields.command](fields.args, function(err, result){
                         if(err)
                             console.log(err);
                         else if(result==fields.value)
                             callback({value:result});
                     })
-                }
-                result.fields=fields;
-                return result;
+                };
+                checker();
+                setTimeout(checker, fields.poll);
             }
         }
     ],
