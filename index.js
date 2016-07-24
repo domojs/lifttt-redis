@@ -1,4 +1,39 @@
 var clients={};
+var debug=$('debug')('ifttt:redis');
+
+var checker=function(port, host)
+{
+    var client=$('../modules/db/node_modules/redis').createClient(port || 6379, host || 'localhost');
+    return function(command, args, callback)
+    {
+        client[command](args, function(err, result){
+            debug(command, args, ':', result);
+            if(err)
+                debug(err);
+            else
+                callback(result);
+        })
+    }
+}
+
+var compare=function(operator, result, value){
+    switch(operator)
+    {
+        case '>=':
+            return result>=value;
+        case '<=':
+            return result<=value;
+        case '>':
+            return result>value;
+        case '<':
+            return result<value;
+        case '!=':
+            return result!=value;
+        case '=':
+        default:
+            return result==value;
+    }
+};
 
 module.exports={
     name:"redis", 
@@ -30,9 +65,9 @@ module.exports={
                 var client=$('../modules/db/node_modules/redis').createClient(fields.port || 6379, fields.host || 'localhost');
                 var checker=function(){
                     client[fields.command](fields.args, function(err, result){
-                        //console.log(fields.command, fields.args, ':', result);
+                        //debug(fields.command, fields.args, ':', result);
                         if(err)
-                            console.log(err);
+                            debug(err);
                         else if(result==fields.value)
                             callback({value:result});
                     })
@@ -45,87 +80,40 @@ module.exports={
             name:"compare",
             fields:[{name:"command", displayName:"The command to run"}, {name:"args", displayName:"arguments"},{name:"operator", displayName:"Operator"}, {name:"poll", displayName:"Polling interval"}, {name:"value", displayName:"Value to compare"}, {name:"host", displayName:"The redis host"}, {name:"port", displayName:"The redis port"}],
             when:function(fields, callback){
-                var client=$('../modules/db/node_modules/redis').createClient(fields.port || 6379, fields.host || 'localhost');
+                var f=checker(fields.port, fields.host);
                 var oldResult=false;
-                var checker=function(){
-                    client[fields.command](fields.args, function(err, result){
-                        console.log(fields.command, fields.args, ':', result, fields.operator, fields.value);
-                        if(err)
-                            console.log(err);
-                        else
+                var c=function(){
+                    f(fields.command, fields.args, function(result){
+                        var comparison=compare(fields.operator, result, fields.value);
+                        if(!oldResult && comparison)
                         {
-                            switch(fields.operator)
-                            {
-                                case '>=':
-                                    if(!oldResult && result>=fields.value)
-                                    {
-                                        oldResult=true;
-                                        console.log('true')
-                                        callback({value:result});
-                                    }
-                                    else if(result<fields.value)
-                                        oldResult=false;
-                                    break;                                    
-                                case '<=':
-                                    if(!oldResult && result<=fields.value)
-                                    {
-                                        oldResult=true;
-                                        console.log('true')
-                                        callback({value:result});
-                                    }
-                                    else if(result>fields.value)
-                                        oldResult=false;
-                                    break;                                    
-                                case '>':
-                                    if(!oldResult && result>fields.value)
-                                    {
-                                        oldResult=true;
-                                        console.log('true')
-                                        callback({value:result});
-                                    }
-                                    else if(result<=fields.value)
-                                        oldResult=false;
-                                    break;                                    
-                                case '<':
-                                    if(!oldResult && result<fields.value)
-                                    {
-                                        oldResult=true;
-                                        console.log('true')
-                                        callback({value:result});
-                                    }
-                                    else if(result>=fields.value)
-                                        oldResult=false;
-                                    break;                                    
-                                case '!=':
-                                    if(!oldResult && result!=fields.value)
-                                    {
-                                        oldResult=true;
-                                        console.log('true')
-                                        callback({value:result});
-                                    }
-                                    else if(result==fields.value)
-                                        oldResult=false;
-                                    break;                                    
-                                case '=':
-                                default:
-                                    if(!oldResult && result==fields.value)
-                                    {
-                                        oldresult=true;
-                                        console.log('true')
-                                        callback({value:result});
-                                    }
-                                    else if(result!=fields.value)
-                                        oldResult=false;
-                                    break;                                    
-                            }
+                            oldResult=comparison;
+                            debug(oldResult);
+                            callback({value:result});
                         }
-                    })
-                };
-                checker();
-                setInterval(checker, fields.poll);
+                        else if(!comparison)
+                            oldResult=false;
+                    });
+                }
+                c();
+                setInterval(c, fields.poll);
             }
         }
     ],
+    "conditions":[
+    {
+        name:"compare",
+        fields:[{name:"command", displayName:"The command to run"}, {name:"args", displayName:"arguments"},{name:"operator", displayName:"Operator"}, {name:"poll", displayName:"Polling interval"}, {name:"value", displayName:"Value to compare"}, {name:"host", displayName:"The redis host"}, {name:"port", displayName:"The redis port"}],
+        evaluate:function(fields)
+        {
+            var f=checker(fields.port, fields.host);
+            return function(triggerFields, callback){
+                f(fields.command, fields.args, function(result){
+                    callback(compare(fields.operator, result, fields.value));
+                });
+            }
+        }
+    }],
     "actions":
     [
         {
