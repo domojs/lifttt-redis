@@ -12,9 +12,9 @@ var checker=function(port, host)
                 debug(err);
             else
                 callback(result);
-        })
-    }
-}
+        });
+    };
+};
 
 var compare=function(operator, result, value){
     switch(operator)
@@ -62,18 +62,23 @@ module.exports={
             name:"equals",
             fields:[{name:"command", displayName:"The command to run"}, {name:"args", displayName:"arguments"}, {name:"poll", displayName:"Polling interval"}, {name:"value", displayName:"Value to compare"}, {name:"host", displayName:"The redis host"}, {name:"port", displayName:"The redis port"}],
             when:function(fields, callback){
-                var client=$('../modules/db/node_modules/redis').createClient(fields.port || 6379, fields.host || 'localhost');
-                var checker=function(){
-                    client[fields.command](fields.args, function(err, result){
-                        //debug(fields.command, fields.args, ':', result);
-                        if(err)
-                            debug(err);
-                        else if(result==fields.value)
+var f=checker(fields.port, fields.host);
+                var oldResult=false;
+                var c=function(){
+                    f(fields.command, fields.args, function(result){
+                        var comparison=compare('=', result, fields.value);
+                        if(!oldResult && comparison)
+                        {
+                            oldResult=comparison;
+                            debug(oldResult);
                             callback({value:result});
-                    })
+                        }
+                        else if(!comparison)
+                            oldResult=false;
+                    });
                 };
-                checker();
-                setInterval(checker, fields.poll);
+                c();
+                setInterval(c, fields.poll);
             }
         },
         {
@@ -94,7 +99,7 @@ module.exports={
                         else if(!comparison)
                             oldResult=false;
                     });
-                }
+                };
                 c();
                 setInterval(c, fields.poll);
             }
@@ -122,7 +127,10 @@ module.exports={
             when:function(fields){
                 var client=$('../modules/db/node_modules/redis').createClient(fields.port || 6379, fields.host || 'localhost');
                 client[fields.command](fields.args, function(err, result){
-                    
+                    if(err)
+                        debug(err);
+                    else
+                        debug(result);
                 });
             }
         }
